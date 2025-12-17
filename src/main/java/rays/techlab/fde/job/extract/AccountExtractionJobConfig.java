@@ -49,6 +49,7 @@ public class AccountExtractionJobConfig {
         return new StepBuilder("processStep", jobRepository)
                 .<AccountInformationDemand, AccountInformationDemand>chunk(10, transactionManager)
                 .reader(reader)
+                .processor(new InhabitantNumberEncryptProcessor())
                 .writer(writer)
                 .build();
     }
