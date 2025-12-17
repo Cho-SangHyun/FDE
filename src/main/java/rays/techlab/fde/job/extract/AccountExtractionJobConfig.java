@@ -15,6 +15,7 @@ import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilde
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.Range;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
@@ -37,7 +38,15 @@ public class AccountExtractionJobConfig {
     @Bean
     public Job accountExtractionJob() {
         return new JobBuilder("accountExtractionJob", jobRepository)
-                .start(processDemandFileStep(multiDemandFileReader(), accountInformationDemandItemWriter()))
+                .start(fetchDemandFilePathStep())
+                .next(processDemandFileStep(multiDemandFileReader(null), accountInformationDemandItemWriter()))
+                .build();
+    }
+
+    @Bean
+    public Step fetchDemandFilePathStep() {
+        return new StepBuilder("fetchDemandFilePathStep", jobRepository)
+                .tasklet(new DemandFilePathFetcherTasklet(), transactionManager)
                 .build();
     }
 
@@ -56,12 +65,18 @@ public class AccountExtractionJobConfig {
 
     @Bean
     @StepScope
-    public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader() {
+    public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader(
+            @Value("#{jobExecutionContext['demandFilePaths']}") String demandFilePaths) {
+
+        String[] demandFilePathArray = demandFilePaths.split(",");
+        Resource[] demandFileResources = new Resource[demandFilePathArray.length];
+        for (int i = 0; i < demandFilePathArray.length; i++) {
+            demandFileResources[i] = new FileSystemResource(demandFilePathArray[i]);
+        }
+
         return new MultiResourceItemReaderBuilder<AccountInformationDemand>()
                 .name("multiDemandFileReader")
-                .resources(new Resource[] {
-                        new FileSystemResource("src/main/resources/testfile.txt")
-                })
+                .resources(demandFileResources)
                 .delegate(accountInformationDemandReader())
                 .build();
     }
