@@ -9,14 +9,16 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.MultiResourceItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.Range;
-import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.transaction.PlatformTransactionManager;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
 import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
@@ -35,13 +37,13 @@ public class AccountExtractionJobConfig {
     @Bean
     public Job accountExtractionJob() {
         return new JobBuilder("accountExtractionJob", jobRepository)
-                .start(processDemandFileStep(accountInformationDemandReader(), accountInformationDemandItemWriter()))
+                .start(processDemandFileStep(multiDemandFileReader(), accountInformationDemandItemWriter()))
                 .build();
     }
 
     @Bean
     public Step processDemandFileStep(
-            FlatFileItemReader<AccountInformationDemand> reader,
+            MultiResourceItemReader<AccountInformationDemand> reader,
             AccountInformationDemandItemWriter writer
     ) {
         return new StepBuilder("processStep", jobRepository)
@@ -53,6 +55,17 @@ public class AccountExtractionJobConfig {
 
     @Bean
     @StepScope
+    public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader() {
+        return new MultiResourceItemReaderBuilder<AccountInformationDemand>()
+                .name("multiDemandFileReader")
+                .resources(new Resource[] {
+                        new FileSystemResource("src/main/resources/testfile.txt")
+                })
+                .delegate(accountInformationDemandReader())
+                .build();
+    }
+
+    @Bean
     public FlatFileItemReader<AccountInformationDemand> accountInformationDemandReader() {
         // 커스텀 Tokenizer 생성 및 설정
         FixedByteLengthTokenizer tokenizer = new FixedByteLengthTokenizer();
