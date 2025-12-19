@@ -1,13 +1,14 @@
 package rays.techlab.fde.job.extract;
 
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.batch.MyBatisBatchItemWriter;
+import org.mybatis.spring.batch.builder.MyBatisBatchItemWriterBuilder;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.Chunk;
-import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.MultiResourceItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
@@ -15,22 +16,32 @@ import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilde
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.Range;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.transaction.PlatformTransactionManager;
+import rays.techlab.fde.domain.account.dto.DemandTargetDto;
+import rays.techlab.fde.domain.account.mapper.DemandTargetMapper;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
 import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
+
 
 @Configuration
 public class AccountExtractionJobConfig {
 
+    @Autowired
+    private SqlSessionFactory sqlSessionFactory;
+
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
 
-    public AccountExtractionJobConfig(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+    public AccountExtractionJobConfig(
+            JobRepository jobRepository,
+            PlatformTransactionManager transactionManager
+    ) {
         this.jobRepository = jobRepository;
         this.transactionManager = transactionManager;
     }
@@ -39,7 +50,9 @@ public class AccountExtractionJobConfig {
     public Job accountExtractionJob() {
         return new JobBuilder("accountExtractionJob", jobRepository)
                 .start(fetchDemandFilePathStep())
-                .next(processDemandFileStep(multiDemandFileReader(null), accountInformationDemandItemWriter()))
+                .next(processDemandFileStep(multiDemandFileReader(null),
+                        inhabitantNumberEncryptProcessor(null),
+                        accountInformationDemandItemWriter()))
                 .build();
     }
 
@@ -53,12 +66,13 @@ public class AccountExtractionJobConfig {
     @Bean
     public Step processDemandFileStep(
             MultiResourceItemReader<AccountInformationDemand> reader,
-            AccountInformationDemandItemWriter writer
+            InhabitantNumberEncryptProcessor processor,
+            MyBatisBatchItemWriter<DemandTargetDto> writer
     ) {
         return new StepBuilder("processStep", jobRepository)
-                .<AccountInformationDemand, AccountInformationDemand>chunk(10, transactionManager)
+                .<AccountInformationDemand, DemandTargetDto>chunk(10, transactionManager)
                 .reader(reader)
-                .processor(new InhabitantNumberEncryptProcessor())
+                .processor(processor)
                 .writer(writer)
                 .build();
     }
@@ -66,7 +80,8 @@ public class AccountExtractionJobConfig {
     @Bean
     @StepScope
     public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader(
-            @Value("#{jobExecutionContext['demandFilePaths']}") String demandFilePaths) {
+            @Value("#{jobExecutionContext['demandFilePaths']}") String demandFilePaths
+    ) {
 
         String[] demandFilePathArray = demandFilePaths.split(",");
         Resource[] demandFileResources = new Resource[demandFilePathArray.length];
@@ -105,24 +120,28 @@ public class AccountExtractionJobConfig {
 
         return new FlatFileItemReaderBuilder<AccountInformationDemand>()
                 .name("accountInformationDemandReader")
-                .resource(new FileSystemResource("src/main/resources/testfile.txt"))
                 .encoding("EUC-KR")
                 .lineMapper(lineMapper)
                 .build();
     }
 
     @Bean
-    public AccountInformationDemandItemWriter accountInformationDemandItemWriter() {
-        return new AccountInformationDemandItemWriter();
+    @StepScope
+    public InhabitantNumberEncryptProcessor inhabitantNumberEncryptProcessor(
+            @Value("#{jobParameters['businessUnitId']}") Long businessUnitId
+    ) {
+        return new InhabitantNumberEncryptProcessor(businessUnitId);
     }
 
-    public static class AccountInformationDemandItemWriter implements ItemWriter<AccountInformationDemand> {
-        @Override
-        public void write(Chunk<? extends AccountInformationDemand> chunk) throws Exception {
-            for (AccountInformationDemand item : chunk) {
-                System.out.println("처리 대상 계좌 정보: " + item.toString());
-            }
-        }
+    @Bean
+    @StepScope
+    public MyBatisBatchItemWriter<DemandTargetDto> accountInformationDemandItemWriter() {
+        return new MyBatisBatchItemWriterBuilder<DemandTargetDto>()
+                .sqlSessionFactory(sqlSessionFactory)
+                .statementId(DemandTargetMapper.class.getName() + ".insertDemandTarget")
+                .assertUpdates(false)
+                .build();
     }
+
 
 }

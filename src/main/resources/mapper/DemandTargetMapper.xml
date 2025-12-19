@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rays.techlab.fde.domain.account.mapper.DemandTargetMapper">
+
+    <insert id="insertDemandTarget" parameterType="rays.techlab.fde.domain.account.dto.DemandTargetDto">
+        INSERT INTO TB_DEMAND_TARGET (
+              BUSINESS_UNIT_ID
+            , SEQUENCE_NUMBER
+            , ENCRYPTED_RES_ID
+            , DEMAND_TARGET_NAME
+            , BASE_DT
+        ) VALUES (
+              #{businessUnitId}
+            , #{sequenceNumber}
+            , #{encryptedInhabitantNumber}
+            , #{demandTargetName}
+            , #{baseDate}
+        )
+    </insert>
+
+</mapper>
