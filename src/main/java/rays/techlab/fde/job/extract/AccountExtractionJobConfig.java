@@ -28,31 +28,36 @@ import rays.techlab.fde.domain.account.mapper.DemandTargetMapper;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
 import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
 
-
+/**
+ * 계좌정보추출 배치 잡 설정 클래스
+ */
 @Configuration
 public class AccountExtractionJobConfig {
 
-    @Autowired
-    private SqlSessionFactory sqlSessionFactory;
-
+    private final SqlSessionFactory sqlSessionFactory;
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
 
+    private final int CHUNK_SIZE = 100;
+
     public AccountExtractionJobConfig(
+            @Autowired SqlSessionFactory sqlSessionFactory,
             JobRepository jobRepository,
             PlatformTransactionManager transactionManager
     ) {
+        this.sqlSessionFactory = sqlSessionFactory;
         this.jobRepository = jobRepository;
         this.transactionManager = transactionManager;
     }
 
     @Bean
-    public Job accountExtractionJob() {
+    public Job accountExtractionJob(
+            Step fetchDemandFilePathStep,
+            Step processDemandFileStep
+    ) {
         return new JobBuilder("accountExtractionJob", jobRepository)
-                .start(fetchDemandFilePathStep())
-                .next(processDemandFileStep(multiDemandFileReader(null),
-                        inhabitantNumberEncryptProcessor(null),
-                        accountInformationDemandItemWriter()))
+                .start(fetchDemandFilePathStep)
+                .next(processDemandFileStep)
                 .build();
     }
 
@@ -70,7 +75,7 @@ public class AccountExtractionJobConfig {
             MyBatisBatchItemWriter<DemandTargetDto> writer
     ) {
         return new StepBuilder("processStep", jobRepository)
-                .<AccountInformationDemand, DemandTargetDto>chunk(10, transactionManager)
+                .<AccountInformationDemand, DemandTargetDto>chunk(CHUNK_SIZE, transactionManager)
                 .reader(reader)
                 .processor(processor)
                 .writer(writer)
@@ -100,7 +105,6 @@ public class AccountExtractionJobConfig {
     public FlatFileItemReader<AccountInformationDemand> accountInformationDemandReader() {
         // 커스텀 Tokenizer 생성 및 설정
         FixedByteLengthTokenizer tokenizer = new FixedByteLengthTokenizer();
-        tokenizer.setEncoding("EUC-KR");
         tokenizer.setRanges(new Range[] {
                 new Range(1, 8),     // 일련번호
                 new Range(9, 22),    // 주민번호
