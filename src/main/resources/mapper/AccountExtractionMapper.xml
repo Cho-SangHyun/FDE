@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rays.techlab.fde.domain.account.mapper.AccountExtractionMapper">
+
+    <insert id="insertDemandTarget" parameterType="rays.techlab.fde.domain.account.dto.DemandTargetDto">
+        INSERT INTO TB_DEMAND_TARGET (
+              BUSINESS_UNIT_ID
+            , SEQUENCE_NUMBER
+            , ENCRYPTED_RES_ID
+            , DEMAND_TARGET_NAME
+            , BASE_DT
+        ) VALUES (
+              #{businessUnitId}
+            , #{sequenceNumber}
+            , #{encryptedInhabitantNumber}
+            , #{demandTargetName}
+            , #{baseDate}
+        )
+    </insert>
+
+    <insert id="extractAccountInformation" parameterType="rays.techlab.fde.domain.account.dto.ExtractionCriteriaDto">
+        INSERT INTO TB_EXTRACTED_ACCOUNT (
+            BUSINESS_UNIT_ID
+          , CUST_ID
+          , CUST_NAME
+          , RES_ID
+          , ACCT_NO
+          , PROD_NAME
+          , PROD_TYPE
+          , BALANCE
+        )
+        SELECT #{businessUnitId}
+             , dtc1.CUST_ID
+             , dtc1.CUST_NAME
+             , dtc1.RES_ID
+             , acc1.ACCT_NO
+             , prd1.PROD_NAME
+             , prd1.PROD_TYPE
+             , TRUNCATE(acc1.BALANCE, 0) as BALANCE
+        FROM TB_ACCOUNT acc1
+        INNER JOIN TB_PRODUCT prd1
+        ON acc1.PROD_CODE = prd1.PROD_CODE
+        AND prd1.PROD_TYPE = '20'
+        INNER JOIN (
+            SELECT cust1.CUST_ID
+                 , cust1.CUST_NAME
+                 , cust1.RES_ID
+            FROM TB_CUSTOMER cust1
+            INNER JOIN  TB_DEMAND_TARGET tg1
+            ON cust1.RES_ID = tg1.ENCRYPTED_RES_ID
+            AND tg1.BUSINESS_UNIT_ID = #{businessUnitId}
+        ) dtc1
+        ON acc1.CUST_ID = dtc1.CUST_ID
+        AND acc1.BASE_DT = #{baseDate}
+        WHERE acc1.BALANCE >= 300000
+
+        UNION ALL
+
+        SELECT #{businessUnitId}
+             , dtc.CUST_ID
+             , dtc.CUST_NAME
+             , dtc.RES_ID
+             , T.ACCT_NO
+             , prd.PROD_NAME
+             , prd.PROD_TYPE
+             , T.BALANCE
+        FROM (
+            SELECT CUST_ID
+                 , ACCT_NO
+                 , TRUNCATE(AVG(BALANCE), 0) AS BALANCE
+            FROM TB_ACCOUNT
+            WHERE BASE_DT BETWEEN #{startDate} AND #{endDate}
+            GROUP BY CUST_ID, ACCT_NO
+            HAVING AVG(BALANCE) >= 300000
+        ) T
+        INNER JOIN TB_ACCOUNT acc
+        ON acc.BASE_DT = #{endDate}
+        AND T.CUST_ID = acc.CUST_ID
+        AND T.ACCT_NO = acc.ACCT_NO
+        INNER JOIN TB_PRODUCT prd
+        ON acc.PROD_CODE = prd.PROD_CODE
+        AND prd.PROD_TYPE = '10'
+        INNER JOIN (
+            SELECT cust.CUST_ID
+                 , cust.CUST_NAME
+                 , cust.RES_ID
+            FROM TB_CUSTOMER cust
+            INNER JOIN  TB_DEMAND_TARGET tg
+            ON cust.RES_ID = tg.ENCRYPTED_RES_ID
+            AND tg.BUSINESS_UNIT_ID = #{businessUnitId}
+        ) dtc
+        ON T.CUST_ID = dtc.CUST_ID
+
+        ORDER BY CUST_ID, PROD_TYPE, ACCT_NO;
+
+    </insert>
+
+</mapper>

@@ -16,7 +16,6 @@ import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilde
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.Range;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +23,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.transaction.PlatformTransactionManager;
 import rays.techlab.fde.domain.account.dto.DemandTargetDto;
-import rays.techlab.fde.domain.account.mapper.DemandTargetMapper;
+import rays.techlab.fde.domain.account.mapper.AccountExtractionMapper;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
 import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
 
@@ -37,27 +36,32 @@ public class AccountExtractionJobConfig {
     private final SqlSessionFactory sqlSessionFactory;
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
+    private final AccountExtractionMapper accountExtractionMapper;
 
     private final int CHUNK_SIZE = 100;
 
     public AccountExtractionJobConfig(
-            @Autowired SqlSessionFactory sqlSessionFactory,
+            SqlSessionFactory sqlSessionFactory,
             JobRepository jobRepository,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            AccountExtractionMapper accountExtractionMapper
     ) {
         this.sqlSessionFactory = sqlSessionFactory;
         this.jobRepository = jobRepository;
         this.transactionManager = transactionManager;
+        this.accountExtractionMapper = accountExtractionMapper;
     }
 
     @Bean
     public Job accountExtractionJob(
             Step fetchDemandFilePathStep,
-            Step processDemandFileStep
+            Step processDemandFileStep,
+            Step extractAccountInformationStep
     ) {
         return new JobBuilder("accountExtractionJob", jobRepository)
                 .start(fetchDemandFilePathStep)
                 .next(processDemandFileStep)
+                .next(extractAccountInformationStep)
                 .build();
     }
 
@@ -83,9 +87,19 @@ public class AccountExtractionJobConfig {
     }
 
     @Bean
+    public Step extractAccountInformationStep(
+            AccountInformationExtractionTasklet accountInformationExtractionTasklet
+    ) {
+        return new StepBuilder("extractAccountStep", jobRepository)
+                .tasklet(accountInformationExtractionTasklet, transactionManager)
+                .build();
+    }
+
+    @Bean
     @StepScope
     public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader(
-            @Value("#{jobExecutionContext['demandFilePaths']}") String demandFilePaths
+            @Value("#{jobExecutionContext['demandFilePaths']}")
+            String demandFilePaths
     ) {
 
         String[] demandFilePathArray = demandFilePaths.split(",");
@@ -142,9 +156,18 @@ public class AccountExtractionJobConfig {
     public MyBatisBatchItemWriter<DemandTargetDto> accountInformationDemandItemWriter() {
         return new MyBatisBatchItemWriterBuilder<DemandTargetDto>()
                 .sqlSessionFactory(sqlSessionFactory)
-                .statementId(DemandTargetMapper.class.getName() + ".insertDemandTarget")
+                .statementId(AccountExtractionMapper.class.getName() + ".insertDemandTarget")
                 .assertUpdates(false)
                 .build();
+    }
+
+    @Bean
+    @StepScope
+    public AccountInformationExtractionTasklet accountInformationExtractionTasklet(
+            @Value("#{jobParameters['businessUnitId']}")
+            Long businessUnitId
+    ) {
+        return new AccountInformationExtractionTasklet(accountExtractionMapper, businessUnitId);
     }
 
 
