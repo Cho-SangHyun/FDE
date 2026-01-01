@@ -7,6 +7,9 @@ import org.springframework.batch.repeat.RepeatStatus;
 import rays.techlab.fde.domain.account.dto.ExtractionCriteriaDto;
 import rays.techlab.fde.domain.account.mapper.AccountExtractionMapper;
 
+/**
+ * 계좌정보추출 Tasklet
+ */
 public class AccountInformationExtractionTasklet implements Tasklet {
 
     private final AccountExtractionMapper accountExtractionMapper;

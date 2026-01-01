@@ -5,7 +5,9 @@ import rays.techlab.fde.domain.account.dto.DemandTargetDto;
 import rays.techlab.fde.global.support.AESUtil;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
 
-
+/**
+ * 주민등록번호 암호화 Processor
+ */
 public class InhabitantNumberEncryptProcessor implements ItemProcessor<AccountInformationDemand, DemandTargetDto> {
 
     private final Long businessUnitId;

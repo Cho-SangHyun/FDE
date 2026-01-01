@@ -7,7 +7,9 @@ import org.springframework.batch.repeat.RepeatStatus;
 
 import java.util.List;
 
-
+/**
+ * 요구 대상자 파일 경로 조회 Tasklet
+ */
 public class DemandFilePathFetcherTasklet implements Tasklet {
 
     @Override
