@@ -2,7 +2,9 @@ package rays.techlab.fde.job.extract;
 
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.batch.MyBatisBatchItemWriter;
+import org.mybatis.spring.batch.MyBatisCursorItemReader;
 import org.mybatis.spring.batch.builder.MyBatisBatchItemWriterBuilder;
+import org.mybatis.spring.batch.builder.MyBatisCursorItemReaderBuilder;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.StepScope;
@@ -10,8 +12,10 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.MultiResourceItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
@@ -23,9 +27,15 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.transaction.PlatformTransactionManager;
 import rays.techlab.fde.domain.account.dto.DemandTargetDto;
+import rays.techlab.fde.domain.account.dto.ExtractedAccountDto;
 import rays.techlab.fde.domain.account.mapper.AccountExtractionMapper;
-import rays.techlab.fde.job.extract.dto.AccountInformationDemand;
+import rays.techlab.fde.global.support.FixedByteLengthLineAggregator;
+import rays.techlab.fde.job.extract.dto.AccountInformationDemandItem;
 import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
+import rays.techlab.fde.job.extract.dto.AccountInformationResultItem;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 계좌정보추출 배치 잡 설정 클래스
@@ -56,12 +66,14 @@ public class AccountExtractionJobConfig {
     public Job accountExtractionJob(
             Step fetchDemandFilePathStep,
             Step processDemandFileStep,
-            Step extractAccountInformationStep
+            Step extractAccountInformationStep,
+            Step writeResultFileStep
     ) {
         return new JobBuilder("accountExtractionJob", jobRepository)
                 .start(fetchDemandFilePathStep)
                 .next(processDemandFileStep)
                 .next(extractAccountInformationStep)
+                .next(writeResultFileStep)
                 .build();
     }
 
@@ -74,12 +86,12 @@ public class AccountExtractionJobConfig {
 
     @Bean
     public Step processDemandFileStep(
-            MultiResourceItemReader<AccountInformationDemand> reader,
+            MultiResourceItemReader<AccountInformationDemandItem> reader,
             InhabitantNumberEncryptProcessor processor,
             MyBatisBatchItemWriter<DemandTargetDto> writer
     ) {
         return new StepBuilder("processStep", jobRepository)
-                .<AccountInformationDemand, DemandTargetDto>chunk(CHUNK_SIZE, transactionManager)
+                .<AccountInformationDemandItem, DemandTargetDto>chunk(CHUNK_SIZE, transactionManager)
                 .reader(reader)
                 .processor(processor)
                 .writer(writer)
@@ -97,7 +109,7 @@ public class AccountExtractionJobConfig {
 
     @Bean
     @StepScope
-    public MultiResourceItemReader<AccountInformationDemand> multiDemandFileReader(
+    public MultiResourceItemReader<AccountInformationDemandItem> multiDemandFileReader(
             @Value("#{jobExecutionContext['demandFilePaths']}")
             String demandFilePaths
     ) {
@@ -108,7 +120,7 @@ public class AccountExtractionJobConfig {
             demandFileResources[i] = new FileSystemResource(demandFilePathArray[i]);
         }
 
-        return new MultiResourceItemReaderBuilder<AccountInformationDemand>()
+        return new MultiResourceItemReaderBuilder<AccountInformationDemandItem>()
                 .name("multiDemandFileReader")
                 .resources(demandFileResources)
                 .delegate(accountInformationDemandReader())
@@ -116,7 +128,7 @@ public class AccountExtractionJobConfig {
     }
 
     @Bean
-    public FlatFileItemReader<AccountInformationDemand> accountInformationDemandReader() {
+    public FlatFileItemReader<AccountInformationDemandItem> accountInformationDemandReader() {
         // 커스텀 Tokenizer 생성 및 설정
         FixedByteLengthTokenizer tokenizer = new FixedByteLengthTokenizer();
         tokenizer.setRanges(new Range[] {
@@ -128,15 +140,15 @@ public class AccountExtractionJobConfig {
         tokenizer.setNames("sequenceNumber", "inhabitantNumber", "targetName", "baseDate");
 
         // BeanWrapperFieldSetMapper: 토큰화된 결과를 자바 객체에 매핑
-        BeanWrapperFieldSetMapper<AccountInformationDemand> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
-        fieldSetMapper.setTargetType(AccountInformationDemand.class);
+        BeanWrapperFieldSetMapper<AccountInformationDemandItem> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
+        fieldSetMapper.setTargetType(AccountInformationDemandItem.class);
 
         // LineMapper 생성 (Tokenizer + FieldSetMapper 연결)
-        DefaultLineMapper<AccountInformationDemand> lineMapper = new DefaultLineMapper<>();
+        DefaultLineMapper<AccountInformationDemandItem> lineMapper = new DefaultLineMapper<>();
         lineMapper.setLineTokenizer(tokenizer);
         lineMapper.setFieldSetMapper(fieldSetMapper);
 
-        return new FlatFileItemReaderBuilder<AccountInformationDemand>()
+        return new FlatFileItemReaderBuilder<AccountInformationDemandItem>()
                 .name("accountInformationDemandReader")
                 .encoding("EUC-KR")
                 .lineMapper(lineMapper)
@@ -168,6 +180,71 @@ public class AccountExtractionJobConfig {
             Long businessUnitId
     ) {
         return new AccountInformationExtractionTasklet(accountExtractionMapper, businessUnitId);
+    }
+
+    @Bean
+    public Step writeResultFileStep(
+            MyBatisCursorItemReader<ExtractedAccountDto> reader,
+            DecryptProcessor processor,
+            FlatFileItemWriter<AccountInformationResultItem> writer
+    ) {
+        return new StepBuilder("writeResultFileStep", jobRepository)
+                .<ExtractedAccountDto, AccountInformationResultItem>chunk(CHUNK_SIZE, transactionManager)
+                .reader(reader)
+                .processor(processor)
+                .writer(writer)
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public MyBatisCursorItemReader<ExtractedAccountDto> accountInformationResultItemReader(
+            @Value("#{jobParameters['businessUnitId']}")
+            Long businessUnitId
+    ) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("businessUnitId", businessUnitId);
+
+        return new MyBatisCursorItemReaderBuilder<ExtractedAccountDto>()
+                .sqlSessionFactory(sqlSessionFactory)
+                .queryId(AccountExtractionMapper.class.getName() + ".selectExtractedAccountInformation")
+                .parameterValues(params)
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public DecryptProcessor decryptProcessor() {
+        return new DecryptProcessor();
+    }
+
+    // Writer는 FieldExtractor로 객체에서 값들을 뽑아내고 LineAggregator로 한 줄의 문자열로 만들어 파일에 기록
+    // 정확히는 LineAggregator가 FieldExtractor를 사용 (멤버변수로 사용한다는 의미)
+    // FieldExtractor는 대표적으론 두 가지가 존재
+    // 1) BeanWrapperFieldExtractor: Java Bean 객체로부터 getter 메서드를 사용하여 필드 값을 추출
+    //     - 자바 빈 객체란 : 스프링 빈이랑 다른 개념. 특정 규칙을 지켜 작성된 Reusable한 클래스를 말함
+    //     - 기본 생성자 존재, 모든 필드는 private, getter / setter를 통해 접근, 직렬화가 구현된 클래스!
+    // 2) RecordFieldExtractor: 레코드 타입(Java Record)에서 필드 값을 추출
+    @Bean
+    @StepScope
+    public FlatFileItemWriter<AccountInformationResultItem> accountInformationResultItemWriter() {
+        return new FlatFileItemWriterBuilder<AccountInformationResultItem>()
+                .name("accountInformationResultItemWriter")
+                .encoding("EUC-KR")
+                .resource(new FileSystemResource("src/main/resources/output.txt"))
+                .lineAggregator(new FixedByteLengthLineAggregator<AccountInformationResultItem>(
+                        (item) -> new Object[] {
+                                item.sequenceNumber(),
+                                item.custName(),
+                                item.inhabitantNumber(),
+                                item.accountNumber(),
+                                item.productType(),
+                                item.productName(),
+                                item.balance()
+                        },
+                        new int[] {8, 30, 14, 30, 2, 20, 20}
+                ))
+                .build();
     }
 
 

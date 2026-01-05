@@ -97,4 +97,19 @@
 
     </insert>
 
+    <select id="selectExtractedAccountInformation" parameterType="map" resultType="rays.techlab.fde.domain.account.dto.ExtractedAccountDto" >
+        SELECT BUSINESS_UNIT_ID
+             , ROW_NUMBER() OVER (ORDER BY CUST_ID, PROD_TYPE, ACCT_NO) AS SEQUENCE_NUMBER
+             , CUST_ID
+             , CUST_NAME
+             , RES_ID
+             , ACCT_NO
+             , PROD_NAME
+             , PROD_TYPE
+             , BALANCE
+        FROM TB_EXTRACTED_ACCOUNT
+        WHERE BUSINESS_UNIT_ID = #{businessUnitId}
+        ORDER BY CUST_ID, PROD_TYPE, ACCT_NO;
+    </select>
+
 </mapper>

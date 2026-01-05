@@ -1,6 +1,6 @@
 package rays.techlab.fde.job.extract.dto;
 
-public class AccountInformationDemand {
+public class AccountInformationDemandItem {
 
     private String sequenceNumber;
     private String inhabitantNumber;
