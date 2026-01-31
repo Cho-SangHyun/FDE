@@ -12,11 +12,11 @@
             , DEMAND_TARGET_NAME
             , BASE_DT
         ) VALUES (
-              #{businessUnitId}
-            , #{sequenceNumber}
-            , #{encryptedInhabitantNumber}
-            , #{demandTargetName}
-            , #{baseDate}
+              #{businessUnitId, jdbcType=BIGINT}
+            , #{sequenceNumber, jdbcType=BIGINT}
+            , #{encryptedInhabitantNumber, jdbcType=VARCHAR}
+            , #{demandTargetName, jdbcType=VARCHAR}
+            , #{baseDate, jdbcType=VARCHAR}
         )
     </insert>
 
@@ -31,7 +31,7 @@
           , PROD_TYPE
           , BALANCE
         )
-        SELECT #{businessUnitId}
+        SELECT CAST(#{businessUnitId, jdbcType=BIGINT} AS BIGINT)
              , dtc1.CUST_ID
              , dtc1.CUST_NAME
              , dtc1.RES_ID
@@ -50,15 +50,15 @@
             FROM TB_CUSTOMER cust1
             INNER JOIN  TB_DEMAND_TARGET tg1
             ON cust1.RES_ID = tg1.ENCRYPTED_RES_ID
-            AND tg1.BUSINESS_UNIT_ID = #{businessUnitId}
+            AND tg1.BUSINESS_UNIT_ID = #{businessUnitId, jdbcType=BIGINT}
         ) dtc1
         ON acc1.CUST_ID = dtc1.CUST_ID
-        AND acc1.BASE_DT = #{baseDate}
+        AND acc1.BASE_DT = #{baseDate, jdbcType=VARCHAR}
         WHERE acc1.BALANCE >= 300000
 
         UNION ALL
 
-        SELECT #{businessUnitId}
+        SELECT CAST(#{businessUnitId, jdbcType=BIGINT} AS BIGINT)
              , dtc.CUST_ID
              , dtc.CUST_NAME
              , dtc.RES_ID
@@ -71,12 +71,12 @@
                  , ACCT_NO
                  , TRUNCATE(AVG(BALANCE), 0) AS BALANCE
             FROM TB_ACCOUNT
-            WHERE BASE_DT BETWEEN #{startDate} AND #{endDate}
+            WHERE BASE_DT BETWEEN #{startDate, jdbcType=VARCHAR} AND #{endDate, jdbcType=VARCHAR}
             GROUP BY CUST_ID, ACCT_NO
             HAVING AVG(BALANCE) >= 300000
         ) T
         INNER JOIN TB_ACCOUNT acc
-        ON acc.BASE_DT = #{endDate}
+        ON acc.BASE_DT = #{baseDate, jdbcType=VARCHAR}
         AND T.CUST_ID = acc.CUST_ID
         AND T.ACCT_NO = acc.ACCT_NO
         INNER JOIN TB_PRODUCT prd
@@ -89,7 +89,7 @@
             FROM TB_CUSTOMER cust
             INNER JOIN  TB_DEMAND_TARGET tg
             ON cust.RES_ID = tg.ENCRYPTED_RES_ID
-            AND tg.BUSINESS_UNIT_ID = #{businessUnitId}
+            AND tg.BUSINESS_UNIT_ID = #{businessUnitId, jdbcType=BIGINT}
         ) dtc
         ON T.CUST_ID = dtc.CUST_ID
 
@@ -108,7 +108,7 @@
              , PROD_TYPE
              , BALANCE
         FROM TB_EXTRACTED_ACCOUNT
-        WHERE BUSINESS_UNIT_ID = #{businessUnitId}
+        WHERE BUSINESS_UNIT_ID = #{businessUnitId, jdbcType=BIGINT}
         ORDER BY CUST_ID, PROD_TYPE, ACCT_NO;
     </select>
 
