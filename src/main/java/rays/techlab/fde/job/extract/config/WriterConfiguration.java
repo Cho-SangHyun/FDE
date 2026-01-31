@@ -6,6 +6,7 @@ import org.mybatis.spring.batch.builder.MyBatisBatchItemWriterBuilder;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
@@ -46,11 +47,13 @@ public class WriterConfiguration {
      */
     @Bean
     @StepScope
-    public FlatFileItemWriter<AccountInformationResultItem> accountInformationResultItemWriter() {
+    public FlatFileItemWriter<AccountInformationResultItem> accountInformationResultItemWriter(
+            @Value("${app.batch.output-path:src/main/resources/output.txt}") String outputPath // 기본값 설정
+    ) {
         return new FlatFileItemWriterBuilder<AccountInformationResultItem>()
                 .name("accountInformationResultItemWriter")
                 .encoding(FileFormatConfiguration.DEFAULT_ENCODING)
-                .resource(new FileSystemResource("src/main/resources/output.txt"))
+                .resource(new FileSystemResource(outputPath))
                 .lineAggregator(new FixedByteLengthLineAggregator<>(
                         (item) -> new Object[] {
                                 item.sequenceNumber(),
