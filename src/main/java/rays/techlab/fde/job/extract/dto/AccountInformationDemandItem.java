@@ -1,10 +1,22 @@
 package rays.techlab.fde.job.extract.dto;
 
+import io.github.Cho_SangHyun.fixedbyte.annotation.Align;
+import io.github.Cho_SangHyun.fixedbyte.annotation.FixedByteField;
+import io.github.Cho_SangHyun.fixedbyte.annotation.FixedByteRecord;
+
+@FixedByteRecord(encoding = "EUC-KR")
 public class AccountInformationDemandItem {
 
+    @FixedByteField(order = 1, length = 8, align = Align.RIGHT, padChar = '0')
     private String sequenceNumber;
+
+    @FixedByteField(order = 2, length = 14, align = Align.LEFT)
     private String inhabitantNumber;
+
+    @FixedByteField(order = 3, length = 30, align = Align.LEFT)
     private String targetName;
+
+    @FixedByteField(order = 4, length = 8, align = Align.LEFT)
     private String baseDate;
 
     public String getSequenceNumber() {

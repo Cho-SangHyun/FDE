@@ -1,5 +1,6 @@
 package rays.techlab.fde.job.extract.config;
 
+import io.github.Cho_SangHyun.fixedbyte.core.FixedByteMapper;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.batch.MyBatisCursorItemReader;
 import org.mybatis.spring.batch.builder.MyBatisCursorItemReaderBuilder;
@@ -8,8 +9,7 @@ import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.MultiResourceItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.builder.MultiResourceItemReaderBuilder;
-import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.LineMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,7 +17,6 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import rays.techlab.fde.domain.account.dto.ExtractedAccountDto;
 import rays.techlab.fde.domain.account.mapper.AccountExtractionMapper;
-import rays.techlab.fde.global.support.FixedByteLengthTokenizer;
 import rays.techlab.fde.job.extract.dto.AccountInformationDemandItem;
 
 import java.util.HashMap;
@@ -64,19 +63,11 @@ public class ReaderConfiguration {
      */
     @Bean
     public FlatFileItemReader<AccountInformationDemandItem> accountInformationDemandReader() {
-        // 커스텀 Tokenizer 생성 및 설정
-        FixedByteLengthTokenizer tokenizer = new FixedByteLengthTokenizer();
-        tokenizer.setRanges(FileFormatConfiguration.DemandFileFormat.getRanges());
-        tokenizer.setNames(FileFormatConfiguration.DemandFileFormat.FIELD_NAMES);
-
-        // BeanWrapperFieldSetMapper: 토큰화된 결과를 자바 객체에 매핑
-        BeanWrapperFieldSetMapper<AccountInformationDemandItem> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
-        fieldSetMapper.setTargetType(AccountInformationDemandItem.class);
-
-        // LineMapper 생성 (Tokenizer + FieldSetMapper 연결)
-        DefaultLineMapper<AccountInformationDemandItem> lineMapper = new DefaultLineMapper<>();
-        lineMapper.setLineTokenizer(tokenizer);
-        lineMapper.setFieldSetMapper(fieldSetMapper);
+        FixedByteMapper mapper = FixedByteMapper.create();
+        LineMapper<AccountInformationDemandItem> lineMapper = (line, lineNumber) -> {
+            byte[] bytes = line.getBytes(FileFormatConfiguration.DEFAULT_ENCODING);
+            return mapper.deserialize(bytes, AccountInformationDemandItem.class);
+        };
 
         return new FlatFileItemReaderBuilder<AccountInformationDemandItem>()
                 .name("accountInformationDemandReader")

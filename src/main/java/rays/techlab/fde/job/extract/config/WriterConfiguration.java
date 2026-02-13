@@ -1,18 +1,19 @@
 package rays.techlab.fde.job.extract.config;
 
+import io.github.Cho_SangHyun.fixedbyte.core.FixedByteMapper;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.batch.MyBatisBatchItemWriter;
 import org.mybatis.spring.batch.builder.MyBatisBatchItemWriterBuilder;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
+import org.springframework.batch.item.file.transform.LineAggregator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
 import rays.techlab.fde.domain.account.dto.DemandTargetDto;
 import rays.techlab.fde.domain.account.mapper.AccountExtractionMapper;
-import rays.techlab.fde.global.support.FixedByteLengthLineAggregator;
 import rays.techlab.fde.job.extract.dto.AccountInformationResultItem;
 
 /**
@@ -50,22 +51,21 @@ public class WriterConfiguration {
     public FlatFileItemWriter<AccountInformationResultItem> accountInformationResultItemWriter(
             @Value("${app.batch.output-path:src/main/resources/output.txt}") String outputPath // 기본값 설정
     ) {
+        FixedByteMapper mapper = FixedByteMapper.create();
+        LineAggregator<AccountInformationResultItem> lineAggregator = (item) -> {
+            try {
+                byte[] bytes = mapper.serialize(item);
+                return new String(bytes, FileFormatConfiguration.DEFAULT_ENCODING);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize AccountInformationResultItem", e);
+            }
+        };
+
         return new FlatFileItemWriterBuilder<AccountInformationResultItem>()
                 .name("accountInformationResultItemWriter")
                 .encoding(FileFormatConfiguration.DEFAULT_ENCODING)
                 .resource(new FileSystemResource(outputPath))
-                .lineAggregator(new FixedByteLengthLineAggregator<>(
-                        (item) -> new Object[] {
-                                item.sequenceNumber(),
-                                item.custName(),
-                                item.inhabitantNumber(),
-                                item.accountNumber(),
-                                item.productType(),
-                                item.productName(),
-                                item.balance()
-                        },
-                        FileFormatConfiguration.ResultFileFormat.getFieldLengths()
-                ))
+                .lineAggregator(lineAggregator)
                 .build();
     }
 }
